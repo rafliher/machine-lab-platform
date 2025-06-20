@@ -6,6 +6,7 @@ from app.core.database import engine, Base, SessionLocal
 from app.models import User, UserRole
 from app.core.security import hash_password
 from app.core.config import get_settings
+import datetime
 
 async def init_models():
     async with engine.begin() as conn:
@@ -29,6 +30,30 @@ async def create_default_admin():
         session.add(new_admin)
         await session.commit()
 
+async def monitor_offline_hosts():
+    """
+    Periodically scan all hosts: if last_seen > 30s ago, mark offline.
+    """
+    from sqlalchemy.future import select
+    from app.core.database import SessionLocal
+    from app.models import ContainerHost, HostStatus
+
+    THRESHOLD = 30  # seconds
+    while True:
+        async with SessionLocal() as session:
+            stmt = select(ContainerHost)
+            res = await session.execute(stmt)
+            hosts = res.scalars().all()
+            now = datetime.datetime.utcnow()
+            for host in hosts:
+                if not host.last_seen or (now - host.last_seen).total_seconds() > THRESHOLD:
+                    if host.status != HostStatus.offline:
+                        host.status = HostStatus.offline
+            await session.commit()
+        await asyncio.sleep(THRESHOLD)
+
+
 async def startup():
     await init_models()
     await create_default_admin()
+    asyncio.create_task(monitor_offline_hosts())

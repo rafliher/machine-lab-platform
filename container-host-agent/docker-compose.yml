@@ -1,0 +1,22 @@
+version: "3.9"
+services:
+  host-agent:
+    build: .
+    image: container-host-agent:latest
+    container_name: host-agent
+    privileged: true               # to allow Docker and tun operations
+    cap_add:
+      - NET_ADMIN
+    env_file:
+      - .env.sample                # picks up JWT_SECRET, DOCKER_SOCKET, etc.
+    environment:
+      # Manager endpoint & credentials
+      - MANAGER_URL=${MANAGER_URL}
+      - HOST_ID=${HOST_ID}         # the UUID you got when registering this host
+      - SERVER_KEY=${SERVER_KEY}   # the X-Server-Key token for this host
+      - HEARTBEAT_INTERVAL=${HEARTBEAT_INTERVAL:-10}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"                # agent’s HTTP API (commands + health)
+    restart: unless-stopped
