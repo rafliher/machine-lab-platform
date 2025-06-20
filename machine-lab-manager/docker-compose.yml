@@ -1,0 +1,56 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      retries: 5
+
+  mq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    ports:
+      - "15672:15672"    # RabbitMQ management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      retries: 5
+
+  manager:
+    build: .
+    restart: unless-stopped
+    privileged: true            # needed for creating tun device
+    cap_add:
+      - NET_ADMIN               # allow OpenVPN to bring up tun0
+    sysctls:
+      - net.ipv4.ip_forward=1   # enable packet forwarding
+    depends_on:
+      db:
+        condition: service_healthy
+      mq:
+        condition: service_started
+    env_file: .env
+    volumes:
+      - ./:/opt/machine-lab-manager
+      # - openvpn-pki:/etc/openvpn/easy-rsa/pki   # persist your PKI files & generated .ovpn
+    ports:
+      - "8000:8000"       # FastAPI
+      - "1194:1194/udp"   # OpenVPN server
+    command: >
+      bash -c "
+        /opt/machine-lab-manager/scripts/init_openvpn.sh &&
+        openvpn --config /etc/openvpn/server.conf & 
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+volumes:
+  pgdata:
+  openvpn-pki:
