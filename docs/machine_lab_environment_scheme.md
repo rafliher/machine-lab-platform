@@ -7,32 +7,54 @@
 ![Machine‑Lab System Architecture](./images/architecture.png)
 
 ```eraser
-title Machine‑Lab System Architecture
+title Machine-Lab System Architecture
 
-Admin [icon: user, label: "Admin"]
-User [icon: user, label: "End User"]
+Admin [icon: k8s-user, label: "Admin / C2"]
+User  [icon: users,    label: "End User"]
 
-"Machine‑Lab Manager & VPN Host" [icon: server] {
-  API Gateway [icon: shield]
-  Scheduler [icon: settings, label: "Placement Engine"]
-  "WireGuard VPN" [icon: lock]
-  "Message Queue" [icon: list]
-  DB [icon: database, label: "PostgreSQL"]
-  Monitoring [icon: bar-chart-2]
+"Machine-Lab Manager & VPN Host" [icon: server] {
+  API_Gateway  [icon: k8s-api,          label: "FastAPI  (HTTPS :8000)"]
+  Scheduler    [icon: azure-scheduler,  label: "Placement Engine"]
+  OpenVPN      [icon: azure-vpn-gateway,label: "OpenVPN Server (UDP 1194)"]
+  DB           [icon: postgres,         label: "PostgreSQL 16"]
+  Monitoring   [icon: monitor]
 }
 
-"Container Server Fleet" [icon: layers] {
-  "Container Server 1" [icon: server, label: "Docker + Agent"]
-  "Container Server n" [icon: server, label: "Docker + Agent"]
+"Container Server Fleet" [icon: layers] {
+  "Container Server 1" [icon: server] {
+    Docker1  [icon: docker, label: "Docker (multiple user containers)"]
+    Agent1   [icon: agent,  label: "Host Agent (HTTPS :8003)"]
+  }
+  "Container Server 2" [icon: server] {
+    Docker2  [icon: docker, label: "Docker (multiple user containers)"]
+    Agent2   [icon: agent,  label: "Host Agent (HTTPS :8003)"]
+  }
+  "Container Server n" [icon: server] {
+    Dockern  [icon: docker, label: "Docker (multiple user containers)"]
+    Agentn   [icon: agent,  label: "Host Agent (HTTPS :8003)"]
+  }
 }
 
-// Connections
-Admin > "Machine‑Lab Manager & VPN Host": "manage (HTTPS/SSH)"
-User > "Container Server 1": "VPN (UDP 51820)"
-User > "Container Server n": "VPN (UDP 51820)"
+// Control-plane connections
+Admin  > API_Gateway:             "manage / C2  (HTTPS)"
+Monitoring  > API_Gateway:            "Show data (HTTPS)"
+Scheduler  <> API_Gateway:            "Manage tasks"
+DB  <> API_Gateway:            "Manage data"
 
-"Machine‑Lab Manager & VPN Host" > "Container Server 1": "Agent API (TLS)"
-"Machine‑Lab Manager & VPN Host" > "Container Server n": "Agent API (TLS)"
+API_Gateway <> Agent1:             "Agent API (TLS)"
+API_Gateway <> Agent2:             "Agent API (TLS)"
+API_Gateway <> Agentn:             "Agent API (TLS)"
+
+// Data-plane (VPN) traffic
+User  > OpenVPN:                  "VPN connect  (UDP 1194)"
+OpenVPN > Docker1:                "routed container traffic"
+OpenVPN > Docker2:                "routed container traffic"
+OpenVPN > Dockern:                "routed container traffic"
+
+Agent1 <> Docker1:                "Manage container"
+Agent2 <> Docker2:                "Manage container"
+Agentn <> Dockern:                "Manage container"
+
 ```
 
 **Highlights**
@@ -45,222 +67,293 @@ User > "Container Server n": "VPN (UDP 51820)"
 
 ## 2. Database Structure (ER Diagrams in Eraser Syntax)
 
-### 2.1 Machine‑Lab Manager DB
 
-![Manager Entities](./images/manager-entities.png)
+![Entities](./images/entities.png)
 
 ```eraser
+// ────────────────────────
+//  Machine-Lab - DB Schema
+// ────────────────────────
+
+users [icon: user, color: blue] {
+  id            uuid  pk
+  email         string unique
+  username      string
+  password_hash string
+  role          enum(userrole)
+  state         enum(userstate)
+}
+
 container_hosts [icon: database, color: purple] {
-  id uuid pk
-  hostname string
-  ip inet
-  ssh_port int
-  api_port int
-  max_containers int
+  id                 uuid  pk
+  hostname           string
+  ip                 inet
+  ssh_port           int
+  api_port           int
+  max_containers     int
   current_containers int
-  status enum(healthy, offline)
-  last_seen timestamptz
-  cred_ref string
+  cpu_percent        int          // % utilisation (0-100)
+  mem_percent        int          // % utilisation (0-100)
+  status             enum(hoststatus)
+  last_seen          timestamptz
+  cred_ref           string
 }
 
 containers [icon: database, color: purple] {
-  id uuid pk
-  user_id uuid
-  host_id uuid
-  name string
-  docker_image string
-  exposed_ports jsonb
-  status enum(pending, running, stopped, error)
+  id         uuid  pk
+  user_id    uuid
+  host_id    uuid
+  name       string
+  status     enum(containerstatus)
   created_at timestamptz
-}
-
-users [icon: user, color: blue] {
-  id uuid pk
-  email string unique
-  username string
-  role enum(user, admin)
-  password_hash string
-  state enum(active, suspended)
 }
 
 vpn_profiles [icon: database, color: purple] {
-  id uuid pk
-  user_id uuid
-  public_key string
-  priv_key_enc string
-  allowed_ips text
-  revoked boolean
-  created_at timestamptz
+  id          uuid  pk
+  client_name string
+  config_path text
+  revoked     boolean
+  created_at  timestamptz
+  ip_address  inet  unique
 }
 
 api_keys [icon: key, color: purple] {
-  id uuid pk
-  owner_type enum(admin, server)
-  owner_id uuid
-  key_hash string
+  id         uuid  pk
+  owner_type enum(apikeyowner)
+  owner_id   uuid
+  key_hash   string
   created_at timestamptz
   expires_at timestamptz
 }
 
+// ────────────
 // Relationships
-container_hosts.id < containers.host_id
-users.id < containers.user_id
-users.id < vpn_profiles.user_id
-api_keys.owner_id "depends on" users.id
+// ────────────
+container_hosts.id <> containers.host_id
+vpn_profiles.client_name <> containers.user_id
+vpn_profiles.client_name <> containers.id
+// api_keys.owner_id may reference either a user or a server record;
+// modelled here as a loose association:
+users.id <> api_keys.owner_id
 ```
 
-### 2.2 Container Server Local State (lightweight SQLite)
+---
 
-![Host Entities](./images/host-entities.png)
+## 3  API Modules (Manager)
 
-```eraser
-local_containers [icon: database, color: orange] {
-  id text pk            // Docker container ID
-  name text
-  image text
-  mapped_ports json
-  state enum(running, exited)
-  created_at timestamptz
-}
+| Module          | Prefix        | Who may call it                          | Main purpose                                        |
+| --------------- | ------------- | ---------------------------------------- | --------------------------------------------------- |
+| **Auth**        | `/auth`       | Admin only                               | Sign-in, change password, rotate admin key          |
+| **Hosts**       | `/hosts`      | Admin for CRUD; Host-agent for heartbeat | Register & manage container hosts, track health     |
+| **Users (VPN)** | `/users`      | Admin only                               | Issue, rotate, or download user VPN profiles        |
+| **Containers**  | `/containers` | Admin only                               | Schedule, restart, stop, or inspect user containers |
 
-server_info [icon: settings, color: orange] {
-  id int pk
-  manager_url text
-  server_key_hash text
-  last_heartbeat timestamptz
+> **Authentication headers**
+>
+> * Admin requests → `X-Admin-Key: <jwt>` (validated by `get_current_admin`);
+> * Host heartbeat → `X-Server-Key: <jwt>` (validated by `get_server_key`);
+
+Both headers are opaque JWTs whose hashes are stored in `api_keys` and are never returned once revoked.
+
+---
+
+## 4  Endpoint Catalogue (Manager)
+
+### 4.1  /auth ( Auth Module );
+
+| Method | Path                    | Body / Params                                          | Returns                                          | Notes                                         |
+| ------ | ----------------------- | ------------------------------------------------------ | ------------------------------------------------ | --------------------------------------------- |
+| `POST` | `/auth/login`           | `{ "email": "<admin @>", "password": "<plain>" }`      | `{ "admin_key": "<JWT>", "expires": null }`      | Issues a **timeless** key and stores its hash |
+| `POST` | `/auth/change-password` | `{ "current_password": "...", "new_password": "..." }` | `{ "message": "Password changed successfully" }` | `X-Admin-Key` required                        |
+| `POST` | `/auth/rotate-key`      | —                                                      | `{ "message": "...", "admin_key": "<new JWT>" }` | Revokes all prior keys for the caller         |
+
+---
+
+### 4.2  /hosts ( Hosts Module );
+
+| Method   | Path                         | Body / Query               | Returns                   | Auth                          |
+| -------- | ---------------------------- | -------------------------- | ------------------------- | ----------------------------- |
+| `GET`    | `/hosts`                     | —                          | `[HostInfo]`              | Admin                         |
+| `GET`    | `/hosts/{host_id}/status`    | —                          | `HostStatusResponse`      | Admin                         |
+| `POST`   | `/hosts`                     | `HostCreate`               | `{ host_id, server_key }` | Admin                         |
+| `PATCH`  | `/hosts/{host_id}`           | `HostUpdate` (partial)     | `HostInfo`                | Admin                         |
+| `DELETE` | `/hosts/{host_id}`           | —                          | *204 No Content*          | Admin                         |
+| `POST`   | `/hosts/{host_id}/heartbeat` | `{ cpu, mem, containers }` | `{ "ack": true }`         | Host-agent via `X-Server-Key` |
+
+**Data model highlights**
+
+```jsonc
+// HostCreate / HostInfo fields
+{
+  "hostname": "docker-node-1",
+  "ip": "10.0.2.17",
+  "ssh_port": 22,
+  "api_port": 8003,
+  "max_containers": 20
 }
 ```
 
-*Container servers store only ephemeral bookkeeping; authoritative state lives in the Manager DB.*
+Health-status values derive from CPU / MEM thresholds (75 % = warning, 90 % = critical).;
 
 ---
 
-## 3. API Modules
+### 4.3  /users ( VPN Module );
 
-### 3.1 Machine‑Lab Manager
+| Method | Path                              | Body                        | Returns     | Notes                                        |                                             |
+| ------ | --------------------------------- | --------------------------- | ----------- | -------------------------------------------- | ------------------------------------------- |
+| `POST` | `/users/vpn`                      | \`{ "client\_name": "\<uuid email>" }\`   | `.ovpn` file stream           |              | Idempotent: returns existing or new profile |
+| `POST` | `/users/vpn/{client_name}/rotate` | —                           | new `.ovpn` | Revokes old profile, assigns fresh static IP |                                             |
 
-| Module                       | Purpose                                                                                       | Auth Mechanism                                              |
-| ---------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **Auth Module**              | Issues & validates **admin keys** (for UI/CLI) and **server keys** (for container servers).   | Admin login (email + password) ⇒ JWT ⇒ `X‑Admin‑Key` header |
-| **User Module**              | Manages user accounts & WireGuard profiles (create, revoke, rotate).                          | `X‑Admin‑Key`                                               |
-| **Container Host Module**    | Register, update, delete container servers; track health & metrics.                           | `X‑Admin‑Key` for mutation; server key for heartbeat        |
-| **Running Container Module** | Launch, stop, inspect containers across the fleet.                                            | `X‑Admin‑Key`                                               |
-| **Connectivity Module**      | Updates VPN ACLs so that *only the requesting user* can reach the container’s IP\:port tuple. | Internal call (no external endpoint)                        |
-
-### 3.2 Container Server
-
-| Module             | Purpose                                                               | Auth Mechanism                           |
-| ------------------ | --------------------------------------------------------------------- | ---------------------------------------- |
-| **Command Module** | Receives signed commands (`start`, `restart`, `remove`) from Manager. | `X‑Server‑Key` header validated via HMAC |
-| **Status Module**  | Reports per‑container state & resource usage to Manager.              | `X‑Server‑Key`                           |
-| **Health Module**  | Heartbeat every N seconds; returns CPU/RAM/uptime.                    | `X‑Server‑Key`                           |
+Both routes stream the profile with content-type `application/x-openvpn-profile`.
 
 ---
 
-## 4. API Endpoints
+### 4.4  /containers ( Containers Module );
 
-Below is a *concise* listing—grouped by module—showing HTTP method, path, key headers, and core request/response shapes (simplified).
+| Method   | Path                                 | Body / Param            | Returns                 | Flow                                                                           |
+| -------- | ------------------------------------ | ----------------------- | ----------------------- | ------------------------------------------------------------------------------ |
+| `POST`   | `/containers/launch?user_id=<uuid>`  | `file=` zip (multipart) | `{ id, host_id }`       | Picks least-loaded host, creates container+VPN pair, whitelists user↔container |
+| `POST`   | `/containers/{container_id}/restart` | —                       | `{ "detail": "..." }`   | Forwards to agent `/restart`                                                   |
+| `DELETE` | `/containers/{container_id}`         | —                       | `{ "detail": "..." }`   | Agent delete → revoke VPN, remove DB row                                       |
+| `GET`    | `/containers/{container_id}`         | —                       | `ContainerInfoResponse` | Combines agent inspect + DB + VPN IP                                           |
+| `GET`    | `/containers`                        | —                       | `[Container]`           | Pure DB list (no live status)                                                  |
 
-### 4.1 Auth Module (Manager)
+**Agent interaction**
 
-- **POST /auth/login** → obtain admin key
+Manager calls host-agent endpoints:
 
-  - Body: `{ "email": "admin@example.com", "password": "secret" }`
-  - Response `200`: `{ "admin_key": "<token>", "expires": "2025‑07‑20T00:00:00Z" }`
+```
+POST http://<host_ip>:<api_port>/agent/containers
+POST http://<host_ip>:<api_port>/agent/containers/{name}/restart
+DELETE http://<host_ip>:<api_port>/agent/containers/{name}
+GET  http://<host_ip>:<api_port>/agent/containers
+```
 
-- **POST /auth/server‑key** (admin‑only) → issue key for new container server
-
-  - Header: `X‑Admin‑Key: <token>`
-  - Body: `{ "host_id": "<uuid>" }`
-  - Response: `{ "server_key": "<token>", "pub_fingerprint": "…" }`
-
-### 4.2 User Module (Manager)
-
-- **POST /users** – create user
-
-  - Header: `X‑Admin‑Key`
-  - Body: `{ "email": "u@corp.local", "username": "alice" }`
-  - Response `201`: user object
-
-- **POST /vpn/users/{user\_id}** – generate WireGuard profile
-
-  - Header: `X‑Admin‑Key`
-  - Response: `200` ⇒ file download (`Content‑Disposition: attachment; filename="alice.conf"`)
-
-- **DELETE /vpn/{profile\_id}** – revoke profile
-
-  - Header: `X‑Admin‑Key`
-  - Response `204`
-
-### 4.3 Container Host Module (Manager)
-
-- **POST /hosts** – register host (first handshake)
-
-  - Header: `X‑Admin‑Key`
-  - Body: `{ "hostname": "cs‑01", "ip": "10.0.2.5", "max_containers": 30 }`
-  - Response: `{ "host_id": "<uuid>", "server_key": "<token>" }`
-
-- **POST /hosts/{id}/heartbeat** – (from server)
-
-  - Header: `X‑Server‑Key`
-  - Body: `{ "cpu": 27, "mem": 43, "containers": 12 }`
-  - Response `200`: `{ "ack": true }`
-
-### 4.4 Running Container Module (Manager)
-
-- **POST /containers** – launch container
-
-  - Header: `X‑Admin‑Key`
-  - Body:
-    ```json
-    {
-      "name": "lab‑nginx",
-      "ports": [80, 443],
-      "docker_zip_url": "https://example.com/src.zip",
-      "user_id": "<uuid>"
-    }
-    ```
-  - Response `202`:
-    ```json
-    {
-      "request_id": "<uuid>",
-      "status": "scheduled"
-    }
-    ```
-
-- **DELETE /containers/{id}** – stop & remove
-
-  - Header: `X‑Admin‑Key`
-  - Response `202`: `{ "status": "terminating" }`
-
-- **GET /containers/{id}** – inspect
-
-  - Header: `X‑Admin‑Key`
-  - Response `200`: container object
-
-### 4.5 Command Module (Container Server)
-
-- **POST /agent/containers** – start container (called by Manager)
-
-  - Header: `X‑Server‑Key`
-  - Body: includes base64 zip or image name & port map
-  - Response: `{ "container_id": "…", "mapped_ports": {"80":10800}}`
-
-- **DELETE /agent/containers/{id}** – stop container
-
-- **PATCH /agent/containers/{id}/restart** – restart container
-
-### 4.6 Status & Health Modules (Container Server)
-
-- **GET /agent/containers** – list all running containers
-- **GET /agent/health** – basic health check `{ "uptime": 3600, "cpu": 23, "mem": 40 }`
+and authenticates each request with `X-Server-Key: <token stored in host.cred_ref>`.;
 
 ---
 
-### Security Notes
+### 4.5  Common response & enum types
 
-- All endpoints **require** either `X‑Admin‑Key` or `X‑Server‑Key` (HMAC‑SHA header) except `/auth/login`.
-- Keys are single‑use tokens hashed in DB; revocation propagates instantly.
-- WireGuard ACL updates occur **after** container creation, ensuring users cannot probe stale ports.
+| Enum              | Values                                      |
+| ----------------- | ------------------------------------------- |
+| `HostStatus`      | `offline`, `healthy`                        |
+| `Healthiness`     | `offline`, `healthy`, `warning`, `critical` |
+| `ContainerStatus` | `pending`, `running`, `stopped`, `error`    |
+
+Timestamps are ISO-8601 strings in UTC (e.g. `2025-06-21T12:34:56Z`).
 
 ---
+
+
+### Using these docs
+
+* **Admin workflow**: `POST /auth/login` → save `admin_key` → pass as `X-Admin-Key` to any subsequent call.
+* **Host bootstrap**: Admin registers a node → receives `server_key` → place it in the agent’s `X-Server-Key` header for heartbeats and container operations.
+
+Below is an **add-on section for the documentation** that complements the Manager API reference you already have.
+Just append it after Sections 3-4 (Manager) and you’ll have a complete picture of both sides of the control-plane.
+
+---
+
+## 5  API Modules (Host Agent)
+
+| Module         | Prefix   | Who may call it                               | Purpose                                                                                                   |
+| -------------- | -------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **Agent Core** | `/agent` | Machine-Lab Manager only (via `X-Server-Key`) | Full life-cycle control of the Docker Compose “sandbox” that lives on this host and node telemetry/health |
+
+### Authentication
+
+Every request from the Manager carries
+`X-Server-Key: <jwt>`
+
+* The key is issued when the host is first registered (`/hosts POST` on the Manager) and its SHA-256 hash is stored in **container\_hosts.cred\_ref**.
+* All routes in the agent’s FastAPI router are protected by `Depends(get_server_key)`.
+
+---
+
+## 6  Endpoint Catalogue (Host Agent)
+
+| Method   | Path                               | Body / Param          | Returns                                                            | Summary                                                              |
+| -------- | ---------------------------------- | --------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `GET`    | `/agent/containers`                | —                     | `List[ContainerInfo]`                                              | List **running** containers on this host                             |
+| `POST`   | `/agent/containers`                | **StartContainerReq** | `ActionResponse` `{"name":…, "status":"started"}`                  | *Unpack → `docker compose up -d`* a brand-new environment            |
+| `POST`   | `/agent/containers/{name}/restart` | —                     | `ActionResponse` `{"name":…, "status":"restarted"}`                | Re-build images and restart the Compose stack                        |
+| `DELETE` | `/agent/containers/{name}`         | —                     | `ActionResponse` `{"name":…, "status":"removed"}`                  | `docker compose down --volumes --rmi all` + delete work-dir          |
+| `GET`    | `/agent/health`                    | —                     | `{ uptime_seconds, running_containers, mem_percent, cpu_percent }` | Node heartbeat payload consumed by Manager’s `/hosts/{id}/heartbeat` |
+
+### 6.1  Data models
+
+```jsonc
+// ContainerInfo
+{
+  "id": "d5f6c8…",
+  "name": "user123-devlab",
+  "image": "python:3.12-slim",
+  "status": "running"        // matches Docker state
+}
+
+// StartContainerReq
+{
+  "name": "user123-devlab",
+  "docker_zip_base64": "<base64-encoded ZIP containing docker-compose.yml & context>",
+  "vpn_conf_base64":   "<base64-encoded .ovpn profile tied to this user>"
+}
+
+// ActionResponse
+{
+  "name": "user123-devlab",
+  "status": "started" | "restarted" | "removed"
+}
+```
+
+### 6.2  Workflow in practice
+
+1. **Manager decides placement** (`POST /containers/launch`).
+2. Manager `POST`s to `http://<host_ip>:<api_port>/agent/containers` with:
+
+   * Compose bundle for the sandbox
+   * The user’s **OpenVPN** client config (`vpn_conf_base64`) that grants access **only** to the container’s private IP/ports.
+3. Agent:
+
+   * Wipes any old workspace at `/opt/containers/<name>/`.
+   * Saves & extracts the ZIP → runs `docker compose up -d`.
+   * Saves the `.ovpn` profile beside the stack (handy for future audits).
+4. Manager records the container row (`containers` table) and updates `current_containers` counter on the host.
+5. Periodically the Manager hits `/agent/health`; the agent returns CPU, RAM, runtime container count, and uptime so the Manager can compute `healthy / warning / critical` host status.
+
+> **Failure handling**
+> If steps 2-3 raise an exception (`subprocess.CalledProcessError`), the agent responds **500** with the exact command failure. The Manager can mark the host “error” and retry elsewhere.
+
+---
+
+### 6.3  Quick test with `curl`
+
+```bash
+SERVER_KEY=<your-new-host-token>
+zip -r ctx.zip docker-compose.yml .
+base64 -w0 ctx.zip  > ctx.b64
+base64 -w0 user123.ovpn > vpn.b64
+
+curl -X POST http://10.0.2.17:8003/agent/containers \
+  -H "X-Server-Key: $SERVER_KEY" \
+  -H "Content-Type: application/json" \
+  -d @- <<EOF
+{
+  "name": "user123-devlab",
+  "docker_zip_base64": "$(cat ctx.b64)",
+  "vpn_conf_base64": "$(cat vpn.b64)"
+}
+EOF
+```
+
+A **201 Created** with `{ "name": "user123-devlab", "status": "started" }` confirms everything is wired correctly.
+
+---
+
+With these additions your documentation now covers **both** halves of the platform:
+
+* **Manager (control-plane)** — Sections 3 & 4
+* **Host Agent (data-plane worker)** — Sections 5 & 6
+
+Feel free to integrate this into your README / docs site or let me know if any details need refining!

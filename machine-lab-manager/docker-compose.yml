@@ -14,16 +14,6 @@ services:
       interval: 10s
       retries: 5
 
-  mq:
-    image: rabbitmq:3-management
-    restart: unless-stopped
-    ports:
-      - "15672:15672"    # RabbitMQ management UI
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      retries: 5
-
   manager:
     build: .
     restart: unless-stopped
