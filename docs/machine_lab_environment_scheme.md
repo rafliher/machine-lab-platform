@@ -349,11 +349,3 @@ EOF
 
 A **201 Created** with `{ "name": "user123-devlab", "status": "started" }` confirms everything is wired correctly.
 
----
-
-With these additions your documentation now covers **both** halves of the platform:
-
-* **Manager (control-plane)** — Sections 3 & 4
-* **Host Agent (data-plane worker)** — Sections 5 & 6
-
-Feel free to integrate this into your README / docs site or let me know if any details need refining!
