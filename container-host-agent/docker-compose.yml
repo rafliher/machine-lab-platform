@@ -15,8 +15,14 @@ services:
       - HOST_ID=${HOST_ID}         # the UUID you got when registering this host
       - SERVER_KEY=${SERVER_KEY}   # the X-Server-Key token for this host
       - HEARTBEAT_INTERVAL=${HEARTBEAT_INTERVAL:-10}
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - DOCKER_TLS_VERIFY=
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - containers_data:/opt/containers 
     ports:
-      - "8000:8000"                # agent’s HTTP API (commands + health)
+      - "8003:8003"                # agent’s HTTP API (commands + health)
     restart: unless-stopped
+volumes:
+  containers_data:
+    driver: local

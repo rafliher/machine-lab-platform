@@ -36,7 +36,7 @@ class ContainerHost(Base):
     )
     api_port = Column(
         Integer,
-        default=8000,
+        default=8003,
         nullable=False,
         doc="Port the agent listens on for commands"
     )
@@ -50,6 +50,18 @@ class ContainerHost(Base):
         default=0,
         nullable=False,
         doc="How many containers are currently running"
+    )
+    cpu_percent = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        doc="Last‐reported CPU usage %"
+    )
+    mem_percent = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        doc="Last‐reported RAM usage %"
     )
     status = Column(
         Enum(HostStatus),
@@ -66,5 +78,5 @@ class ContainerHost(Base):
     cred_ref = Column(
         String,
         nullable=True,
-        doc="Reference to the server’s API key record"
+        doc="X-Server-Key for agent authentication"
     )

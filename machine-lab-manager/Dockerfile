@@ -11,7 +11,7 @@ WORKDIR /opt/machine-lab-manager
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       gcc libpq-dev \
-      openvpn easy-rsa && \
+      openvpn easy-rsa iptables && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy Easy-RSA templates into /etc/openvpn/easy-rsa so we never

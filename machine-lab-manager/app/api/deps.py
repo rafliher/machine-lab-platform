@@ -45,3 +45,31 @@ async def get_current_admin(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No such admin")
 
     return user
+
+async def get_server_key(
+    x_server_key: str = Header(..., alias="X-Server-Key"),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    # Decode & verify JWT
+    try:
+        payload = jwt.decode(
+            x_server_key,
+            settings.jwt_secret,
+            algorithms=["HS256"],
+            options={"verify_exp": False},
+        )
+        host_id = payload.get("sub")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bad server token")
+
+    # Ensure we have an active server APIKey
+    stmt = select(APIKey).where(
+        APIKey.key_hash == hash_token(x_server_key),
+        APIKey.owner_id == host_id
+    )
+    res = await db.execute(stmt)
+    if not res.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Server key revoked or invalid")
+
+    # Optionally: return host_id so handlers can verify path matches token
+    return host_id

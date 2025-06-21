@@ -1,7 +1,7 @@
 import uuid
 import datetime
 from sqlalchemy import Column, Text, Boolean, DateTime, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, INET
 from app.core.database import Base
 
 class VPNProfile(Base):
@@ -11,22 +11,31 @@ class VPNProfile(Base):
     id = Column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4
+        default=uuid.uuid4,
+        doc="Unique VPN profile ID",
     )
 
-    # Name of the VPN client (not tied to your admin users)
+    # Logical VPN username or lab‐user identifier
     client_name = Column(
         String,
         nullable=False,
         index=True,
-        doc="Logical VPN username or lab‐user identifier"
+        doc="Client identifier for this profile",
+    )
+
+    # Assigned VPN IP address
+    ip_address = Column(
+        INET,
+        nullable=False,
+        unique=True,
+        doc="Static VPN IP assigned to this client",
     )
 
     # Path on disk where the .ovpn file lives
     config_path = Column(
         Text,
         nullable=False,
-        doc="Filesystem path to the generated .ovpn"
+        doc="Filesystem path to the generated .ovpn",
     )
 
     # Has this profile been revoked/rotated?
@@ -34,12 +43,13 @@ class VPNProfile(Base):
         Boolean,
         nullable=False,
         default=False,
-        doc="True once this profile has been rotated or revoked"
+        doc="True once this profile has been rotated or revoked",
     )
 
+    # When this profile was first generated
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
         default=datetime.datetime.utcnow,
-        doc="When this profile was first generated"
+        doc="Timestamp of profile creation",
     )

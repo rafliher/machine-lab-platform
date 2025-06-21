@@ -3,6 +3,7 @@ set -e
 
 EASYRSA_DIR=/etc/openvpn/easy-rsa
 PKI_DIR="$EASYRSA_DIR/pki"
+CCD_DIR=/etc/openvpn/ccd
 
 # Only initialize if the CA cert isn't already there
 if [ ! -f "$PKI_DIR/ca.crt" ]; then
@@ -30,21 +31,32 @@ if [ ! -f "$PKI_DIR/ca.crt" ]; then
 port 1194
 proto udp
 dev tun
+
+topology subnet
+
 ca /etc/openvpn/easy-rsa/pki/ca.crt
 cert /etc/openvpn/easy-rsa/pki/issued/server.crt
 key /etc/openvpn/easy-rsa/pki/private/server.key
 dh /etc/openvpn/easy-rsa/pki/dh.pem
 tls-auth /etc/openvpn/easy-rsa/ta.key 0
+
+server 10.8.0.0 255.255.255.0
+
+client-config-dir /etc/openvpn/ccd
+
 keepalive 10 120
 persist-key
 persist-tun
 user nobody
 group nogroup
 verb 3
-server 10.8.0.0 255.255.255.0
-push "redirect-gateway def1 bypass-dhcp"
-push "dhcp-option DNS 8.8.8.8"
 EOF
+
+  mkdir -p "$CCD_DIR"
+  chown nobody:nogroup "$CCD_DIR"
+  chmod 744 "$CCD_DIR"
+
+  iptables -I FORWARD -i tun0 -o tun0 j DROP
 
   echo "OpenVPN PKI initialized."
 else

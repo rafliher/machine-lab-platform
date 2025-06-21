@@ -1,0 +1,17 @@
+name: Who Are You
+author: rafliher
+description: |
+  Ever heard of obfuscation?
+
+tags:
+  - js
+
+connection_info: http://hostname:6001
+
+category: Rev
+type: standard
+value: 100  # Static score, can be adjusted if needed
+flags:
+  - CNCC{obfuscatingyourcodedoesntreallymakeitunreadeable}
+
+state: visible

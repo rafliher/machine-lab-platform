@@ -40,7 +40,7 @@ services:
     env_file: .env
     volumes:
       - ./:/opt/machine-lab-manager
-      # - openvpn-pki:/etc/openvpn/easy-rsa/pki   # persist your PKI files & generated .ovpn
+      - openvpn:/etc/openvpn/
     ports:
       - "8000:8000"       # FastAPI
       - "1194:1194/udp"   # OpenVPN server
@@ -53,4 +53,4 @@ services:
 
 volumes:
   pgdata:
-  openvpn-pki:
+  openvpn:

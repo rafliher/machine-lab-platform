@@ -1,0 +1,17 @@
+FROM nginx:alpine
+
+# Install OpenVPN and tools
+RUN apk add --no-cache openvpn iproute2
+
+# Copy web assets
+COPY src/index.html /usr/share/nginx/html/
+COPY src/script.js  /usr/share/nginx/html/
+
+# Copy VPN config and entrypoint
+COPY vpn.ovpn         /etc/openvpn/vpn.ovpn
+COPY entrypoint.sh    /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 80
+
+ENTRYPOINT ["/entrypoint.sh"]

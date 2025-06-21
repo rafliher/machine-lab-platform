@@ -1,13 +1,15 @@
 import os
+import subprocess
 import tempfile
 import zipfile
 import base64
+import shutil
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse, FileResponse
-from pydantic import BaseModel, Field
-from docker import DockerClient
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+import docker
 import psutil
 
 from app.api.deps import get_server_key
@@ -20,87 +22,159 @@ router = APIRouter(
 )
 
 # Initialize Docker client
-client = DockerClient(base_url=settings.docker_socket)
+client = docker.from_env()
 
+# Base dir for all compose projects
+WORK_DIR = "/opt/containers"
+os.makedirs(WORK_DIR, exist_ok=True)
+
+
+# ─── Schemas ────────────────────────────────────────────────────────────
 
 class ContainerInfo(BaseModel):
     id: str
     name: str
     image: str
     status: str
-    ports: dict[str, list[dict[str,int]]]
 
+
+class StartContainerReq(BaseModel):
+    name: str
+    docker_zip_base64: str
+    vpn_conf_base64: str
+
+
+class ActionResponse(BaseModel):
+    name: str
+    status: str
+
+
+# ─── Existing: list containers ──────────────────────────────────────────
 
 @router.get("/containers", response_model=list[ContainerInfo])
 def list_containers():
-    ctrs = client.containers.list(all=True)
+    ctrs = client.containers.list()
     return [
         ContainerInfo(
             id=c.id,
             name=c.name,
             image=c.image.tags[0] if c.image.tags else "",
             status=c.status,
-            ports=c.ports
         ) for c in ctrs
     ]
 
 
-class StartContainerReq(BaseModel):
-    name: str
-    image: str | None = None
-    port_map: dict[int,int] = Field(..., description="host_port:container_port")
-    docker_zip_base64: str | None = Field(
-        None,
-        description="Optional base64-encoded zip of Docker context"
-    )
+# ─── New: start from Docker‐Compose + VPN conf ──────────────────────────
 
-
-@router.post("/containers", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/containers",
+    response_model=ActionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Unpack & docker compose up -d a new environment"
+)
 def start_container(req: StartContainerReq):
-    # Build image from zip if provided
-    image_ref = req.image
-    if req.docker_zip_base64:
-        data = base64.b64decode(req.docker_zip_base64)
-        with tempfile.TemporaryDirectory() as tmp:
-            zip_path = os.path.join(tmp, "ctx.zip")
-            with open(zip_path, "wb") as f:
-                f.write(data)
-            with zipfile.ZipFile(zip_path, "r") as z:
-                z.extractall(tmp)
-            image, _ = client.images.build(path=tmp, rm=True)
-            image_ref = image.tags[0] if image.tags else image.id
+    work_dir = os.path.join(WORK_DIR, req.name)
 
-    # Map ports
-    ports = {f"{ctr}/tcp": host for host, ctr in req.port_map.items()}
-    container = client.containers.run(
-        image_ref,
-        name=req.name,
-        detach=True,
-        ports=ports
-    )
-    return JSONResponse({"id": container.id, "status": container.status})
+    # 1) Remove old project folder if exists
+    if os.path.exists(work_dir):
+        shutil.rmtree(work_dir)
+    os.makedirs(work_dir)
 
+    # 2) Extract the Docker Compose ZIP
+    ctx_zip = os.path.join(work_dir, "context.zip")
+    with open(ctx_zip, "wb") as f:
+        f.write(base64.b64decode(req.docker_zip_base64))
+    with zipfile.ZipFile(ctx_zip, "r") as z:
+        z.extractall(work_dir)
+    os.remove(ctx_zip)
 
-@router.delete("/containers/{container_id}", status_code=status.HTTP_202_ACCEPTED)
-def stop_remove_container(container_id: str):
+    # 3) Write the VPN profile into the project
+    vpn_path = os.path.join(work_dir, "vpn.ovpn")
+    with open(vpn_path, "wb") as f:
+        f.write(base64.b64decode(req.vpn_conf_base64))
+
+    # 4) Launch with Docker Compose
     try:
-        c = client.containers.get(container_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail="Container not found")
-    c.stop()
-    c.remove()
-    return JSONResponse({"id": container_id, "status": "removed"})
+        subprocess.run(
+            ["docker", "compose", "up", "-d"],
+            cwd=work_dir,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"'docker compose up' failed: {e}"
+        )
+
+    return ActionResponse(name=req.name, status="started")
 
 
-@router.patch("/containers/{container_id}/restart", status_code=status.HTTP_200_OK)
-def restart_container(container_id: str):
+# ─── New: rebuild & restart ────────────────────────────────────────────
+
+@router.post(
+    "/containers/{name}/restart",
+    response_model=ActionResponse,
+    summary="Rebuild & restart an existing environment"
+)
+def restart_container(name: str):
+    work_dir = os.path.join(WORK_DIR, name)
+    if not os.path.isdir(work_dir):
+        raise HTTPException(status_code=404, detail="Environment not found")
+
     try:
-        c = client.containers.get(container_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail="Container not found")
-    c.restart()
-    return JSONResponse({"id": container_id, "status": c.status})
+        # Rebuild images
+        subprocess.run(
+            ["docker", "compose", "build"],
+            cwd=work_dir,
+            check=True
+        )
+        # Restart services
+        subprocess.run(
+            ["docker", "compose", "up", "-d"],
+            cwd=work_dir,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Restart failed: {e}"
+        )
 
+    return ActionResponse(name=name, status="restarted")
+
+
+# ─── New: down & remove ─────────────────────────────────────────────────
+
+@router.delete(
+    "/containers/{name}",
+    response_model=ActionResponse,
+    summary="Down & remove the environment"
+)
+def remove_container(name: str):
+    work_dir = os.path.join(WORK_DIR, name)
+    if not os.path.isdir(work_dir):
+        raise HTTPException(status_code=404, detail="Environment not found")
+
+    try:
+        # Shut down, remove volumes & images
+        subprocess.run(
+            ["docker", "compose", "down", "--volumes", "--rmi", "all"],
+            cwd=work_dir,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"'docker compose down' failed: {e}"
+        )
+
+    # Finally, delete the directory
+    shutil.rmtree(work_dir)
+
+    return ActionResponse(name=name, status="removed")
+
+
+# ─── Existing: health check ─────────────────────────────────────────────
 
 @router.get("/health", status_code=status.HTTP_200_OK)
 def health():

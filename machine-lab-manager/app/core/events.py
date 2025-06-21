@@ -7,6 +7,7 @@ from app.models import User, UserRole
 from app.core.security import hash_password
 from app.core.config import get_settings
 import datetime
+from datetime import timezone
 
 async def init_models():
     async with engine.begin() as conn:
@@ -44,14 +45,13 @@ async def monitor_offline_hosts():
             stmt = select(ContainerHost)
             res = await session.execute(stmt)
             hosts = res.scalars().all()
-            now = datetime.datetime.utcnow()
+            now = datetime.datetime.now(timezone.utc)
             for host in hosts:
                 if not host.last_seen or (now - host.last_seen).total_seconds() > THRESHOLD:
                     if host.status != HostStatus.offline:
                         host.status = HostStatus.offline
             await session.commit()
         await asyncio.sleep(THRESHOLD)
-
 
 async def startup():
     await init_models()
