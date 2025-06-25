@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App code + OpenVPN PKI init scripts
 COPY app ./app
 COPY scripts ./scripts
-COPY .env.sample ./
+COPY .env ./
 
 # Expose & run both services
 EXPOSE 8000 1194/udp
