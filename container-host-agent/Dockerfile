@@ -36,7 +36,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 3) Copy your agent code
 COPY app ./app
-COPY .env.sample ./
+COPY .env ./
 
 EXPOSE 8003
 
