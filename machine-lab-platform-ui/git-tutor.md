@@ -1,0 +1,1 @@
+git subtree push --prefix=machine-lab-platform-ui ui main

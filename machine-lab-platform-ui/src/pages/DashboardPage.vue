@@ -1,0 +1,330 @@
+<template>
+  <MainLayout>
+    <div v-if="isLoading" class="loading-overlay">
+      <div class="spinner"></div>
+    </div>
+    <div class="container-dashboard">
+      <div class="chart-section">
+        <h3>Grafik Kontainer Aktif</h3>
+        <div class="chart-wrapper">
+          <canvas id="containerChart"></canvas>
+        </div>
+      </div>
+
+      <div class="header">
+        <h3 class="header-title">Monitoring Container Aktif</h3>
+        <div class="upload-section">
+          <input v-model="newContainerName" placeholder="Nama Container" class="input-name" />
+          <button @click="showAddContainerForm = true" class="submit-upload">+ Tambah Container</button>
+        </div>
+      </div>
+
+      <table class="container-table">
+        <thead>
+          <tr>
+            <th>Nama</th>
+            <th>Status</th>
+            <th>UserId</th>
+            <th>Created</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="container in containers" :key="container.id">
+            <td>{{ container.name }}</td>
+            <td :class="container.status">{{ container.status }}</td>
+            <td>{{ container.user_id }}</td>
+            <td>{{ formatDate(container.created_at) }}</td>
+            <td>
+              <button @click="restart(container.id)" class="action-btn" title="Restart">
+                <i class="fa fa-rotate-right"></i> Restart
+              </button>
+              <button @click="remove(container.id)" class="action-btn" title="Hapus">
+                <i class="fa fa-trash"></i> Delete
+              </button>
+
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <ContainerForm
+        v-if="showAddContainerForm"
+        @add-container="handleAddContainer"
+        @close="showAddContainerForm = false"
+      />
+    </div>
+  </MainLayout>
+</template>
+
+<script>
+import Chart from 'chart.js/auto';
+import MainLayout from '../layouts/MainLayout.vue';
+import ContainerForm from '../components/ContainerForm.vue';
+import { listContainer, deleteContainer, restartContainer } from '../services/apiContainerService';
+import dayjs from 'dayjs';
+import { useToast } from 'vue-toastification';
+import { addContainer } from '../services/apiContainerService';
+
+export default {
+  components: { MainLayout, ContainerForm },
+  data() {
+    return {
+      zipFile: null,
+      newContainerName: '',
+      showAddContainerForm: false,
+      containers: [],
+      isLoading: false,
+    };
+  },
+  setup() {
+    const toast = useToast();
+    return { toast };
+  },
+  methods: {
+    async handleAddContainer(data) {
+      if (this.loading) return;
+      if (!data) return;
+      this.isLoading = true;
+      try {
+        await addContainer(data);
+        this.fetchContainers();
+        this.toast.success('Container berhasil ditambahkan');
+        this.showAddHostModal = false;
+      } catch (error) {
+        console.error('Gagal menambahkan container:', error);
+        this.toast.error('Gagal menambahkan container');
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    formatDate(datetime) {
+      return dayjs(datetime).format('YYYY-MM-DD HH:mm');
+    },
+    async fetchContainers() {
+      this.loading = true;
+      try {
+        const res = await listContainer();
+        this.containers = res.data;
+        this.renderChart();
+      } catch (error) {
+        console.error(error);
+        this.toast.error('Gagal memuat data container');
+      } finally {
+        this.loading = false;
+      }
+    },
+    async restart(id) {
+      this.loading = true;
+      try {
+        await restartContainer(id);
+        this.toast.success('Container berhasil direstart');
+        this.fetchContainers();
+      } catch (error) {
+        console.error(error);
+        this.toast.error('Gagal me-restart container');
+      } finally {
+        this.loading = false;
+      }
+    },
+    async remove(id) {
+      this.loading = true;
+      try {
+        await deleteContainer(id);
+        this.toast.success('Container dihapus');
+        this.fetchContainers();
+      } catch (error) {
+        console.error(error);
+        this.toast.error('Gagal menghapus container');
+      } finally {
+        this.loading = false;
+      }
+    },
+    renderChart() {
+      const running = this.containers.filter(c => c.status === 'running').length;
+      const stopped = this.containers.filter(c => c.status === 'stopped').length;
+      const ctx = document.getElementById('containerChart');
+      if (ctx._chart) {
+        ctx._chart.destroy();
+      }
+      const chart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Running', 'Stopped'],
+          datasets: [{
+            data: [running, stopped],
+            backgroundColor: ['#2ecc71', '#e74c3c']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+        }
+      });
+      ctx._chart = chart;
+    }
+  },
+  mounted() {
+    this.fetchContainers();
+  }
+};
+</script>
+
+<style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+.container-dashboard {
+  margin: 2em auto;
+  width: 100%;
+  max-width: 1200px;
+  background: rgba(20, 20, 30, 0.95);
+  padding: 2em;
+  border-radius: 12px;
+  font-family: 'Share Tech Mono', monospace;
+  color: #f5f5f5;
+}
+
+.header {
+  margin-top: 2em;
+}
+
+.header-title {
+  margin-bottom: 0.5em;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #ff3d3d;
+}
+
+.upload-section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1em;
+  margin-bottom: 1em;
+}
+
+.upload-btn {
+  background: #ff3d3d;
+  color: #f5f5f5;
+  padding: 0.5em 1em;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.input-name {
+  padding: 0.5em;
+  border-radius: 8px;
+  border: 1px solid #ff3d3d;
+  min-width: 180px;
+  background: #222;
+  color: #f5f5f5;
+}
+
+.submit-upload {
+  background-color: #ff3d3d;
+  color: #f5f5f5;
+  border: none;
+  padding: 0.5em 1em;
+  border-radius: 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.submit-upload:hover {
+  box-shadow: 0px 0px 15px #ff3d3d80;
+}
+
+.container-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1em;
+  font-size: 0.95rem;
+}
+
+.container-table th,
+.container-table td {
+  padding: 0.75em;
+  text-align: left;
+  border-bottom: 1px solid #ff3d3d30;
+}
+
+.container-table th {
+  background: #222;
+  color: #ff3d3d;
+  text-transform: uppercase;
+}
+
+.running {
+  color: #00ff00;
+  font-weight: bold;
+}
+
+.stopped {
+  color: #ff3d3d;
+  font-weight: bold;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-right: 0.5em;
+  font-size: 14px;
+  color: #f5f5f5;
+}
+
+.action-btn:hover {
+  color: #ff3d3d;
+}
+
+.chart-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1em;
+  margin-bottom: 2em;
+}
+
+.chart-wrapper {
+  width: 200px;
+  height: 200px;
+  background: #111;
+  padding: 1em;
+  border-radius: 12px;
+  box-shadow: 0px 0px 25px #ff3d3d30;
+}
+
+.chart-wrapper canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(20, 20, 30, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.spinner {
+  border: 6px solid #ccc;
+  border-top: 6px solid #ff3d3d;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>
