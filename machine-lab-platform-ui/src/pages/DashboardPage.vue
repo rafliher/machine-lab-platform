@@ -25,6 +25,7 @@
             <th>Nama</th>
             <th>Status</th>
             <th>UserId</th>
+            <th>HostId</th>
             <th>Created</th>
             <th>Aksi</th>
           </tr>
@@ -34,6 +35,7 @@
             <td>{{ container.name }}</td>
             <td :class="container.status">{{ container.status }}</td>
             <td>{{ container.user_id }}</td>
+            <td>{{ container.host_id }}</td>
             <td>{{ formatDate(container.created_at) }}</td>
             <td>
               <button @click="restart(container.id)" class="action-btn" title="Restart">
@@ -81,12 +83,12 @@ export default {
     return { toast };
   },
   methods: {
-    async handleAddContainer(data) {
+    async handleAddContainer(user_id, data) {
       if (this.loading) return;
       if (!data) return;
       this.isLoading = true;
       try {
-        await addContainer(data);
+        await addContainer(user_id, data);
         this.fetchContainers();
         this.toast.success('Container berhasil ditambahkan');
         this.showAddHostModal = false;

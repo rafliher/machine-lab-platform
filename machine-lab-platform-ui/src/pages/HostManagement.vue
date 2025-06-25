@@ -11,6 +11,7 @@
       <table class="host-table">
         <thead>
           <tr>
+            <th>ID</th>
             <th>Nama Host</th>
             <th>IP Address</th>
             <th>Status</th>
@@ -21,6 +22,7 @@
         </thead>
         <tbody>
           <tr v-for="host in hosts" :key="host.id">
+            <td>{{ host.id }}</td>
             <td>{{ host.hostname }}</td>
             <td>{{ host.ip }}</td>
             <td :class="host.status">{{ host.status }}</td>

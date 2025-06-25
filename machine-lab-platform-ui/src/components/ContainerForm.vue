@@ -43,7 +43,7 @@ export default {
       formData.append('file', this.file);
 
       try {
-        this.$emit('add-container', formData);
+        this.$emit('add-container', this.userId, formData);
         this.$emit('close');
       } catch (error) {
         console.error('Gagal menambahkan container:', error);
