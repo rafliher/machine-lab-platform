@@ -41,6 +41,9 @@
             <td>{{ container.id }}</td>
             <td>{{ formatDate(container.created_at) }}</td>
             <td>
+              <button @click="viewDetail(container.id)" class="action-btn" title="Detail">
+                <i class="fa fa-eye"></i> Detail
+              </button>
               <button @click="restart(container.id)" class="action-btn" title="Restart">
                 <i class="fa fa-rotate-right"></i> Restart
               </button>
@@ -57,6 +60,11 @@
         @add-container="handleAddContainer"
         @close="showAddContainerForm = false"
       />
+      <ContainerDetail
+        v-if="showDetailModal"
+        :detail="detailData"
+        @close="showDetailModal = false"
+      />
     </div>
   </MainLayout>
 </template>
@@ -65,13 +73,14 @@
 import Chart from 'chart.js/auto';
 import MainLayout from '../layouts/MainLayout.vue';
 import ContainerForm from '../components/ContainerForm.vue';
-import { listContainer, deleteContainer, restartContainer } from '../services/apiContainerService';
+import ContainerDetail from '../components/ContainerDetail.vue';
+import { listContainer, deleteContainer, restartContainer, getContainerData } from '../services/apiContainerService';
 import dayjs from 'dayjs';
 import { useToast } from 'vue-toastification';
 import { addContainer } from '../services/apiContainerService';
 
 export default {
-  components: { MainLayout, ContainerForm },
+  components: { MainLayout, ContainerForm, ContainerDetail },
   data() {
     return {
       zipFile: null,
@@ -79,6 +88,8 @@ export default {
       showAddContainerForm: false,
       containers: [],
       isLoading: false,
+      showDetailModal: false,
+      detailData: {},
     };
   },
   setup() {
@@ -108,6 +119,19 @@ export default {
       } catch (error) {
         console.error('Gagal menambahkan container:', error);
         this.toast.error('Gagal menambahkan container');
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    async viewDetail(id) {
+      this.isLoading = true;
+      try {
+        const res = await getContainerData(id);
+        this.detailData = res.data;
+        this.showDetailModal = true;
+      } catch (err) {
+        console.error('Gagal mengambil detail:', err);
+        this.toast.error('Gagal mengambil detail container');
       } finally {
         this.isLoading = false;
       }
@@ -340,4 +364,31 @@ export default {
     transform: rotate(360deg);
   }
 }
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 10, 10, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #1e1e2f;
+  padding: 2em;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  color: #f5f5f5;
+  font-family: monospace;
+  box-shadow: 0 0 25px #ff3d3d40;
+}
+
 </style>
