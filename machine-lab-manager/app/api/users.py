@@ -1,4 +1,4 @@
-# app/api/users_vpn.py
+# app/api/users.py
 import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse

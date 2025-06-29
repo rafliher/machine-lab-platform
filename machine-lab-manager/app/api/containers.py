@@ -79,6 +79,7 @@ async def launch_container(
         raise HTTPException(status_code=503, detail="No available host")
 
     # 3) Load or create the user's VPN profile
+    await create_or_get_profile(db, str(user_id))
     stmt = select(VPNProfile).where(
         VPNProfile.client_name == str(user_id),
         VPNProfile.revoked == False
