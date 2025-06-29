@@ -4,7 +4,7 @@ export function listContainer() {
   return api.get('/containers');
 }
 
-export function addContainer(userId, name, containerData) {
+export function addContainer(userId, containerData) {
   return api.post(`/containers/launch?user_id=${userId}`, containerData);
 }
 

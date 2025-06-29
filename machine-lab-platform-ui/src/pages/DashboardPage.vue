@@ -1,6 +1,6 @@
 <template>
   <MainLayout>
-    <div v-if="isLoading" class="loading-overlay">
+    <div v-if="isLoading" class="isLoading-overlay">
       <div class="spinner"></div>
     </div>
     <div class="container-dashboard">
@@ -107,12 +107,12 @@ export default {
     }
   },
   methods: {
-    async handleAddContainer(user_id, name, data) {
-      if (this.loading) return;
+    async handleAddContainer(user_id, data) {
+      if (this.isLoading) return;
       if (!data) return;
       this.isLoading = true;
       try {
-        await addContainer(user_id, name, data);
+        await addContainer(user_id, data);
         this.fetchContainers();
         this.toast.success('Container berhasil ditambahkan');
         this.showAddHostModal = false;
@@ -140,7 +140,7 @@ export default {
       return dayjs(datetime).format('YYYY-MM-DD HH:mm');
     },
     async fetchContainers() {
-      this.loading = true;
+      this.isLoading = true;
       try {
         const res = await listContainer();
         this.containers = res.data;
@@ -149,12 +149,12 @@ export default {
         console.error(error);
         this.toast.error('Gagal memuat data container');
       } finally {
-        this.loading = false;
+        this.isLoading = false;
       }
     },
     async restart(id) {
-      this.loading = true;
-      console.log(this.loading);
+      this.isLoading = true;
+      console.log(this.isLoading);
       try {
         await restartContainer(id);
         this.fetchContainers();
@@ -163,11 +163,11 @@ export default {
         console.error(error);
         this.toast.error('Gagal me-restart container');
       } finally {
-        this.loading = false;
+        this.isLoading = false;
       }
     },
     async remove(id) {
-      this.loading = true;
+      this.isLoading = true;
       try {
         await deleteContainer(id);
         this.toast.success('Container dihapus');
@@ -176,7 +176,7 @@ export default {
         console.error(error);
         this.toast.error('Gagal menghapus container');
       } finally {
-        this.loading = false;
+        this.isLoading = false;
       }
     },
     renderChart() {
@@ -337,7 +337,7 @@ export default {
   height: 100% !important;
 }
 
-.loading-overlay {
+.isLoading-overlay {
   position: fixed;
   top: 0;
   left: 0;
