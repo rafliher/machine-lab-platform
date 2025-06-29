@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import LoginPage from '../pages/LoginPage.vue';
 import Dashboard from '../pages/DashboardPage.vue';
 import HostManagement from '../pages/HostManagement.vue';
-import ChangePassword from '../pages/ChangePassword.vue';
+import ChangePassword from '../pages/AuthenticationPage.vue';
 import { isAuthenticated } from '../utils/auth';
 
 const routes = [

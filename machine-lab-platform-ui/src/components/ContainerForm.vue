@@ -6,6 +6,10 @@
         User ID:
         <input v-model="userId" required placeholder="Masukkan User ID" />
       </label>
+      <label>
+        Container Name:
+        <input v-model="name" required placeholder="Masukkan Nama Container" />
+      </label>
 
       <label>
         File ZIP:
@@ -26,6 +30,7 @@ export default {
   data() {
     return {
       userId: '',
+      name: '',
       file: null
     };
   },
@@ -43,7 +48,7 @@ export default {
       formData.append('file', this.file);
 
       try {
-        this.$emit('add-container', this.userId, formData);
+        this.$emit('add-container', this.userId, this.name, formData);
         this.$emit('close');
       } catch (error) {
         console.error('Gagal menambahkan container:', error);

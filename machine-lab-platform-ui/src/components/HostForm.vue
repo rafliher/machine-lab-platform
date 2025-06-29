@@ -56,7 +56,7 @@ export default {
         hostname: '',
         ip: '',
         ssh_port: 22,
-        api_port: 8000,
+        api_port: 8003,
         max_containers: 1
       }
     };

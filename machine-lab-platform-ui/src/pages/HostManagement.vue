@@ -8,6 +8,9 @@
         <h2>Manajemen Host</h2>
         <button class="add-button" @click="showAddHostModal = true">+ Tambah Host</button>
       </div>
+      <div class="search-section">
+        <input v-model="searchQuery" placeholder="Nama Hosts" class="input-name" />
+      </div>
       <table class="host-table">
         <thead>
           <tr>
@@ -21,7 +24,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="host in hosts" :key="host.id">
+          <tr v-for="host in filteredHosts" :key="host.id">
             <td>{{ host.id }}</td>
             <td>{{ host.hostname }}</td>
             <td>{{ host.ip }}</td>
@@ -94,6 +97,7 @@ export default {
       showAddHostModal: false,
       isLoading: false,
       showCredentialModal: false,
+      searchQuery: '',
       newHostCredentials: {
         host_id: '',
         server_key: ''
@@ -103,6 +107,16 @@ export default {
   setup() {
     const toast = useToast();
     return { toast };
+  },
+  computed: {
+    filteredHosts() {
+      const q = this.searchQuery.toLowerCase();
+      return this.hosts.filter(c =>
+        c.hostname.toLowerCase().includes(q) ||
+        c.ip.toLowerCase().includes(q) ||
+        c.status.toLowerCase().includes(q)
+      );
+    }
   },
   methods: {
     async fetchHosts() {
@@ -221,6 +235,7 @@ export default {
 }
 
 .host-table {
+  margin-top: 1em;
   width: 100%;
   border-collapse: collapse;
   background: #111;
@@ -339,6 +354,15 @@ export default {
   color: #ff3d3d;
   margin-bottom: 1em;
   font-size: 1.3rem;
+}
+
+.input-name {
+  padding: 0.5em;
+  border-radius: 8px;
+  border: 1px solid #ff3d3d;
+  min-width: 180px;
+  background: #222;
+  color: #f5f5f5;
 }
 
 .code-box {

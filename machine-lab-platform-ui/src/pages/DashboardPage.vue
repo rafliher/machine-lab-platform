@@ -13,10 +13,11 @@
 
       <div class="header">
         <h3 class="header-title">Monitoring Container Aktif</h3>
-        <div class="upload-section">
-          <input v-model="newContainerName" placeholder="Nama Container" class="input-name" />
-          <button @click="showAddContainerForm = true" class="submit-upload">+ Tambah Container</button>
-        </div>
+        <button @click="showAddContainerForm = true" class="submit-upload">+ Tambah Container</button>
+      </div>
+      
+      <div class="search-section">
+        <input v-model="searchQuery" placeholder="Nama Container" class="input-name" />
       </div>
 
       <table class="container-table">
@@ -26,16 +27,18 @@
             <th>Status</th>
             <th>UserId</th>
             <th>HostId</th>
+            <th>ContainerId</th>
             <th>Created</th>
             <th>Aksi</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="container in containers" :key="container.id">
+          <tr v-for="container in filteredContainers" :key="container.id">
             <td>{{ container.name }}</td>
             <td :class="container.status">{{ container.status }}</td>
             <td>{{ container.user_id }}</td>
             <td>{{ container.host_id }}</td>
+            <td>{{ container.id }}</td>
             <td>{{ formatDate(container.created_at) }}</td>
             <td>
               <button @click="restart(container.id)" class="action-btn" title="Restart">
@@ -72,7 +75,7 @@ export default {
   data() {
     return {
       zipFile: null,
-      newContainerName: '',
+      searchQuery: '',
       showAddContainerForm: false,
       containers: [],
       isLoading: false,
@@ -82,13 +85,23 @@ export default {
     const toast = useToast();
     return { toast };
   },
+  computed: {
+    filteredContainers() {
+      const q = this.searchQuery.toLowerCase();
+      return this.containers.filter(c =>
+        c.name.toLowerCase().includes(q) ||
+        c.host_id.toLowerCase().includes(q) ||
+        c.status.toLowerCase().includes(q)
+      );
+    }
+  },
   methods: {
-    async handleAddContainer(user_id, data) {
+    async handleAddContainer(user_id, name, data) {
       if (this.loading) return;
       if (!data) return;
       this.isLoading = true;
       try {
-        await addContainer(user_id, data);
+        await addContainer(user_id, name, data);
         this.fetchContainers();
         this.toast.success('Container berhasil ditambahkan');
         this.showAddHostModal = false;
@@ -117,10 +130,11 @@ export default {
     },
     async restart(id) {
       this.loading = true;
+      console.log(this.loading);
       try {
         await restartContainer(id);
-        this.toast.success('Container berhasil direstart');
         this.fetchContainers();
+        this.toast.success('Container berhasil direstart');
       } catch (error) {
         console.error(error);
         this.toast.error('Gagal me-restart container');
@@ -187,21 +201,18 @@ export default {
 
 .header {
   margin-top: 2em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1em;
 }
+
 
 .header-title {
   margin-bottom: 0.5em;
   font-size: 1.25rem;
   font-weight: 600;
   color: #ff3d3d;
-}
-
-.upload-section {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1em;
-  margin-bottom: 1em;
 }
 
 .upload-btn {

@@ -4,7 +4,7 @@
     <div class="links">
       <router-link to="/dashboard">Dashboard</router-link>
       <router-link to="/hosts">Hosts</router-link>
-      <router-link to="/changepassword">Ganti Password</router-link>
+      <router-link to="/changepassword">Authentication</router-link>
       <button @click="logout">Logout</button>
     </div>
   </nav>
