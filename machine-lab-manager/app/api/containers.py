@@ -136,7 +136,7 @@ async def launch_container(
         )
 
     if resp.status_code != status.HTTP_201_CREATED:
-        text = await resp.text()
+        text = resp.text
         raise HTTPException(
             status_code=resp.status_code,
             detail=f"Agent failed to launch container: {text}"
