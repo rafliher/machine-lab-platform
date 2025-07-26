@@ -47,6 +47,9 @@ class ContainerLaunchResponse(BaseModel):
 
 class ContainerInfoResponse(BaseModel):
     id: str
+    host_id: str
+    user_id: str
+    created_at: datetime.datetime
     name: str
     image: str
     status: str
@@ -78,8 +81,16 @@ async def launch_container(
     if not host:
         raise HTTPException(status_code=503, detail="No available host")
 
-    # 3) Load or create the user's VPN profile
-    await create_or_get_profile(db, str(user_id))
+    # 3) Create or fetch the user's VPN profile, catching any errors
+    try:
+        user_ovpn_path = await create_or_get_profile(db, str(user_id))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create VPN profile for user {user_id}: {e}"
+        )
+
+    # 4) Load the VPNProfile record so we know the assigned IP
     stmt = select(VPNProfile).where(
         VPNProfile.client_name == str(user_id),
         VPNProfile.revoked == False
@@ -88,9 +99,16 @@ async def launch_container(
     if not user_prof:
         raise HTTPException(status_code=500, detail="User VPN profile missing")
 
-    # 4) Pre-generate a container ID & create its VPN profile
+    # 5) Pre-generate a container ID & create its VPN profile, again catching errors
     container_id = str(uuid.uuid4())
-    container_ovpn_path = await create_or_get_profile(db, container_id)
+    try:
+        cont_ovpn_path = await create_or_get_profile(db, container_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create VPN profile for container {container_id}: {e}"
+        )
+
     stmt = select(VPNProfile).where(
         VPNProfile.client_name == container_id,
         VPNProfile.revoked == False
@@ -98,10 +116,11 @@ async def launch_container(
     cont_prof = (await db.execute(stmt)).scalar_one_or_none()
     if not cont_prof:
         raise HTTPException(status_code=500, detail="Container VPN profile missing")
-    with open(container_ovpn_path, "rb") as f:
+
+    with open(cont_ovpn_path, "rb") as f:
         encoded_vpn_container = base64.b64encode(f.read()).decode()
 
-    # 5) Instruct the host agent to start the container
+    # 6) Tell the host agent to start the container
     agent_url = f"http://{host.ip}:{host.api_port}/agent/containers"
     payload = {
         "name": container_id,
@@ -115,14 +134,15 @@ async def launch_container(
             headers={"X-Server-Key": host.cred_ref},
             timeout=30.0,
         )
+
     if resp.status_code != status.HTTP_201_CREATED:
         text = await resp.text()
         raise HTTPException(
             status_code=resp.status_code,
-            detail=f"Agent failed to launch: {text}"
+            detail=f"Agent failed to launch container: {text}"
         )
 
-    # 6) Persist in our DB
+    # 7) Persist in our DB
     container = Container(
         id=container_id,
         user_id=user_id,
@@ -135,11 +155,10 @@ async def launch_container(
     host.current_containers += 1
     await db.commit()
 
-    # 7) Allow only user<->container over tun0
+    # 8) Allow only user↔container over tun0
     apply_vpn_rule(user_prof.ip_address, cont_prof.ip_address)
 
     return ContainerLaunchResponse(id=container_id, host_id=host.id)
-
 
 @router.post(
     "/{container_id}/restart",
@@ -271,6 +290,9 @@ async def inspect_container(
 
     return ContainerInfoResponse(
         id=container_id,
+        host_id=str(cont.host_id),
+        user_id=str(cont.user_id),
+        created_at=cont.created_at,
         name=info["name"],
         image=info.get("image", ""),
         status=info.get("status", ""),

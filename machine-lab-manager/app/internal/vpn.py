@@ -214,6 +214,4 @@ async def remove_vpn_profile(db: AsyncSession, user_id: uuid.UUID | str):
     res = await db.execute(stmt)
     for prof in res.scalars().all():
         prof.revoked = True
-        if prof.ip_address:
-            remove_vpn_rule(prof.ip_address)
     await db.commit()

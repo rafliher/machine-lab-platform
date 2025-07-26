@@ -23,23 +23,23 @@
       <table class="container-table">
         <thead>
           <tr>
-            <th>Nama</th>
+            <th>ContainerId</th>
+            <!-- <th>Nama</th> -->
             <th>Status</th>
             <th>UserId</th>
             <th>HostId</th>
-            <th>ContainerId</th>
-            <th>Created</th>
+            <!-- <th>Created</th> -->
             <th>Aksi</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="container in filteredContainers" :key="container.id">
-            <td>{{ container.name }}</td>
+            <td>{{ container.id }}</td>
+            <!-- <td>{{ container.name }}</td> -->
             <td :class="container.status">{{ container.status }}</td>
             <td>{{ container.user_id }}</td>
             <td>{{ container.host_id }}</td>
-            <td>{{ container.id }}</td>
-            <td>{{ formatDate(container.created_at) }}</td>
+            <!-- <td>{{ formatDate(container.created_at) }}</td> -->
             <td>
               <button @click="viewDetail(container.id)" class="action-btn" title="Detail">
                 <i class="fa fa-eye"></i> Detail

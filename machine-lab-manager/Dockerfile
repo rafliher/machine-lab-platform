@@ -28,6 +28,8 @@ COPY app ./app
 COPY scripts ./scripts
 COPY .env ./
 
+RUN chmod +x /opt/machine-lab-manager/scripts/*.sh
+
 # Expose & run both services
 EXPOSE 8000 1194/udp
 

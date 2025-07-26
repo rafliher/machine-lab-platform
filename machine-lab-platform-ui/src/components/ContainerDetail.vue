@@ -13,8 +13,20 @@
           <span class="value">{{ detail.name }}</span>
         </div>
         <div class="detail-row">
-          <span class="label">Image:</span>
-          <span class="value">{{ detail.image }}</span>
+          <span class="label">Host ID:</span>
+          <span class="value">{{ detail.host_id }}</span>
+        </div>
+        <div class="actions" :style="{marginTop: '0'}">
+          <button class="btn-vpn" :disabled="downloading" @click="downloadVpn()">
+            {{ downloading ? 'Downloading…' : 'Download User VPN Profile' }}
+          </button>
+          <button class="btn-vpn" :disabled="rotating" @click="rotateVpn()">
+            {{ rotating ? 'Rotating…' : 'Rotate User VPN Profile' }}
+          </button>
+        </div>
+        <div class="detail-row">
+          <span class="label">User ID:</span>
+          <span class="value">{{ detail.user_id }}</span>
         </div>
         <div class="detail-row">
           <span class="label">Status:</span>
@@ -34,14 +46,65 @@
 </template>
 
 <script>
+import { saveAs } from 'file-saver'
+import { getVpnProfile, rotateVpnProfile } from '../services/apiUserService'
+
 export default {
   props: {
     detail: {
       type: Object,
       required: true
     }
+  },
+  data() {
+    return {
+      downloading: false,
+      rotating: false
+    }
+  },
+  methods: {
+    async downloadVpn() {
+      this.downloading = true
+      try {
+        // call the API to get (or create) the profile
+        const resp = await getVpnProfile(this.detail.user_id)
+        const blob = new Blob([resp.data], {
+          type: 'application/x-openvpn-profile'
+        })
+        saveAs(blob, `${this.detail.user_id}.ovpn`)
+      } catch (e) {
+        console.error('Failed to download VPN profile', e)
+        this.$notify({
+          type: 'error',
+          title: 'Error',
+          text: 'Could not download VPN profile.'
+        })
+      } finally {
+        this.downloading = false
+      }
+    },
+    async rotateVpn() {
+      this.rotating = true
+      try {
+        // call the API to revoke + re-create the profile
+        const resp = await rotateVpnProfile(this.detail.user_id)
+        const blob = new Blob([resp.data], {
+          type: 'application/x-openvpn-profile'
+        })
+        saveAs(blob, `${this.detail.user_id}.ovpn`)
+      } catch (e) {
+        console.error('Failed to rotate VPN profile', e)
+        this.$notify({
+          type: 'error',
+          title: 'Error',
+          text: 'Could not rotate VPN profile.'
+        })
+      } finally {
+        this.rotating = false
+      }
+    }
   }
-};
+}
 </script>
 
 <style scoped>
@@ -108,6 +171,28 @@ export default {
 .actions {
   margin-top: 2em;
   text-align: right;
+  display: flex;
+  gap: 0.5em;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn-vpn {
+  background-color: #0066cc;
+  color: #fff;
+  border: none;
+  padding: 0.5em 1em;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-vpn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-vpn:hover:not([disabled]) {
+  box-shadow: 0 0 10px #0066cc80;
 }
 
 .btn-close {

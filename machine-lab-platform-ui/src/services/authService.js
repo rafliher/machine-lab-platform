@@ -10,7 +10,7 @@ export function logout() {
 }
 
 export function changePassword(currentPassword, newPassword) {
-  return api.post('/auth/change-password', { currentPassword, newPassword });
+  return api.post('/auth/change-password', { "current_password": currentPassword, "new_password": newPassword });
 }
 
 export function rotateKey() {
