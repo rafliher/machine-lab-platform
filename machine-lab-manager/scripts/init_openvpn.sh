@@ -56,7 +56,7 @@ EOF
   chown nobody:nogroup "$CCD_DIR"
   chmod 744 "$CCD_DIR"
 
-  iptables -I FORWARD -i tun0 -o tun0 j DROP
+  iptables -I FORWARD -i tun0 -o tun0 -j DROP
 
   echo "OpenVPN PKI initialized."
 else

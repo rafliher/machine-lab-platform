@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+
+    <!-- Navbar -->
+    <nav class="bg-blue-600 p-4 text-white flex justify-between items-center rounded-lg shadow-md mb-6">
+        <h1 class="text-xl font-bold">Dashboard</h1>
+        <a href="/logout" class="bg-red-500 px-4 py-2 rounded hover:bg-red-600">Logout</a>
+    </nav>
+
+    <div class="w-full mx-auto bg-white p-6 rounded-lg shadow-md">
+        <h2 class="text-2xl font-bold mb-4">Manage Pages</h2>
+        
+        <!-- Add Page Form -->
+        <form method="POST" action="/pages" class="mb-4">
+            <input type="text" name="title" placeholder="Title" class="w-full p-2 mb-2 border rounded-lg" required>
+            <textarea name="content" placeholder="Content" class="w-full p-2 mb-2 border rounded-lg h-40" required></textarea>
+            <button type="submit" class="bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600">Add Page</button>
+        </form>
+
+        <!-- Page List -->
+        <table class="w-full border-collapse border border-gray-300">
+            <thead>
+                <tr class="bg-gray-200">
+                    <th class="p-2 border">Title</th>
+                    <th class="p-2 border">Content</th>
+                    <th class="p-2 border">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% pages.forEach(page => { %>
+                <tr>
+                    <td class="p-2 border"><%= page.title %></td>
+                    <td class="p-2 border"><%= page.content %></td>
+                    <td class="p-2 border flex gap-2">
+                        <a href="/pages/edit/<%= page.id %>" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Edit</a>
+                        <a href="/pages/delete/<%= page.id %>" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">Delete</a>
+                    </td>
+                </tr>
+                <% }); %>
+            </tbody>
+        </table>
+    </div>
+
+</body>
+</html>
