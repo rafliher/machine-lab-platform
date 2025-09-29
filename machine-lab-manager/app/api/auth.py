@@ -30,8 +30,19 @@ class LoginResponse(BaseModel):
     expires: datetime.datetime | None = None  # timeless keys yield null
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post(
+    "/login", 
+    response_model=LoginResponse,
+    summary="Admin login",
+    description="Authenticate as admin and receive an API key for subsequent requests."
+)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Login as an administrator and receive an API key.
+    
+    The returned admin_key should be included in the `X-Admin-Key` header 
+    for authenticated requests to other endpoints.
+    """
     stmt = select(User).where(User.email == req.email, User.role == UserRole.admin)
     res = await db.execute(stmt)
     user: User | None = res.scalar_one_or_none()
@@ -67,13 +78,20 @@ class MessageResponse(BaseModel):
 @router.post(
     "/change-password",
     response_model=MessageResponse,
-    status_code=status.HTTP_200_OK
+    status_code=status.HTTP_200_OK,
+    summary="Change admin password",
+    description="Change the current admin user's password."
 )
 async def change_password(
     body: PWChangeReq,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Change the password for the currently authenticated admin user.
+    
+    Requires the current password for verification.
+    """
     if not verify_password(body.current_password, admin.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Wrong current password")
 
@@ -93,12 +111,24 @@ class RotateKeyResponse(BaseModel):
 @router.post(
     "/rotate-key",
     response_model=RotateKeyResponse,
-    status_code=status.HTTP_200_OK
+    status_code=status.HTTP_200_OK,
+    summary="Rotate admin API key",
+    description="Revoke current API key and issue a new one."
 )
 async def rotate_key(
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Rotate the admin API key.
+    
+    This will:
+    1. Revoke all existing API keys for the admin
+    2. Issue a new API key
+    3. Return the new key
+    
+    Update your client to use the new admin_key for future requests.
+    """
     # Revoke existing keys
     now = datetime.datetime.utcnow()
     stmt = select(APIKey).where(APIKey.owner_id == admin.id)

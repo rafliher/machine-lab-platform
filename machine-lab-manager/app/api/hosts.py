@@ -93,9 +93,22 @@ class HostStatusResponse(BaseModel):
 
 
 @router.get(
-    "/", response_model=list[HostInfo], dependencies=[Depends(get_current_admin)]
+    "/", 
+    response_model=list[HostInfo], 
+    dependencies=[Depends(get_current_admin)],
+    summary="List all container hosts",
+    description="Retrieve a list of all registered container hosts with their current status and health metrics."
 )
 async def list_hosts(db: AsyncSession = Depends(get_db)):
+    """
+    Get a list of all registered container hosts.
+    
+    Returns detailed information about each host including:
+    - Current status (online/offline/healthy/warning/critical)
+    - Resource usage (CPU and memory percentages)
+    - Container count and capacity
+    - Last seen timestamp
+    """
     stmt = select(ContainerHost)
     res = await db.execute(stmt)
     hosts = res.scalars().all()
@@ -156,11 +169,24 @@ async def get_host_status(
     response_model=HostRegisterResponse,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(get_current_admin)],  # admin-only
+    summary="Register a new container host",
+    description="Register a new container host and receive server credentials for heartbeat communication."
 )
 async def register_host(
     req: HostCreate,
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Register a new container host.
+    
+    This endpoint:
+    1. Creates a new host record in the database
+    2. Generates a server key for heartbeat authentication
+    3. Returns the host ID and server key
+    
+    The returned server_key should be used in the X-Server-Key header
+    for heartbeat requests from this host.
+    """
     # 1) Create the host record
     new_host = ContainerHost(
         hostname=req.hostname,
@@ -263,7 +289,8 @@ async def delete_host(
 @router.post(
     "/{host_id}/heartbeat",
     status_code=status.HTTP_200_OK,
-    summary="Heartbeat from container host",
+    summary="Host heartbeat",
+    description="Heartbeat endpoint for container hosts to report their status and resource usage.",
     dependencies=[Depends(get_server_key)],
 )
 async def host_heartbeat(
@@ -271,6 +298,16 @@ async def host_heartbeat(
     payload: HeartbeatRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Receive heartbeat from a container host.
+    
+    Container hosts should send periodic heartbeats with:
+    - Current CPU usage percentage
+    - Current memory usage percentage  
+    - Number of running containers
+    
+    This updates the host's status to healthy and records the metrics.
+    """
     stmt = select(ContainerHost).where(ContainerHost.id == host_id)
     res = await db.execute(stmt)
     host = res.scalar_one_or_none()

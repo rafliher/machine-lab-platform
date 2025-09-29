@@ -29,7 +29,8 @@ class CreateVPNReq(BaseModel):
 
 @router.post(
     "/vpn",
-    summary="Get existing or create a VPN profile for a client_name",
+    summary="Create or get VPN profile",
+    description="Create a new VPN profile for a client or return existing one if already exists.",
     status_code=status.HTTP_200_OK,
 )
 async def create_vpn_profile(
@@ -37,8 +38,13 @@ async def create_vpn_profile(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Creates (or returns) a WireGuard/OpenVPN profile for `client_name`,
-    assigning a static IP if new.
+    Creates or returns a VPN profile for the specified client.
+    
+    If a profile already exists for the client_name, returns the existing profile.
+    If not, creates a new OpenVPN profile with a static IP assignment.
+    
+    The returned file is an .ovpn configuration file that can be imported
+    into OpenVPN clients for secure access to containerized environments.
     """
     print(f"Creating VPN profile for {req.client_name}")
     path = await create_or_get_profile(db, req.client_name)
@@ -51,7 +57,8 @@ async def create_vpn_profile(
 
 @router.post(
     "/vpn/{client_name}/rotate",
-    summary="Revoke old & issue a fresh VPN profile",
+    summary="Rotate VPN profile",
+    description="Revoke existing VPN profile and create a new one with fresh credentials.",
     status_code=status.HTTP_200_OK,
 )
 async def rotate_vpn_profile(
@@ -59,8 +66,15 @@ async def rotate_vpn_profile(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Revokes any existing profile for `client_name` (clears iptables, DB flag, files),
-    then issues a brand-new .ovpn with a new static IP.
+    Rotate the VPN profile for a specific client.
+    
+    This operation:
+    1. Revokes any existing profile for the client
+    2. Removes associated firewall rules and certificates
+    3. Creates a brand-new VPN profile with fresh credentials
+    4. Assigns a new static IP address
+    
+    Use this when a VPN profile may be compromised or needs to be renewed.
     """
     # Ensure there was something to revoke (optional)
     stmt = await db.execute(

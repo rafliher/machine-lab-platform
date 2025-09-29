@@ -59,13 +59,29 @@ class ContainerInfoResponse(BaseModel):
     "/launch",
     response_model=ContainerLaunchResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Launch a Docker-Compose environment for a user"
+    summary="Launch containerized environment",
+    description="Upload and launch a Docker Compose environment for a user with automatic VPN integration."
 )
 async def launch_container(
     user_id: uuid.UUID,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Launch a containerized environment for a user.
+    
+    This endpoint:
+    1. Accepts a ZIP file containing Docker Compose configuration
+    2. Selects an available container host with sufficient resources
+    3. Creates or retrieves a VPN profile for the user
+    4. Deploys the environment on the selected host
+    5. Sets up VPN routing for secure access
+    
+    The ZIP file should contain:
+    - docker-compose.yml or docker-compose.yaml
+    - Any additional files referenced in the compose file
+    - Optional Dockerfile(s) for custom images
+    """
     # 1) Read & base64-encode the ZIP
     data = await file.read()
     encoded_zip = base64.b64encode(data).decode()
@@ -163,12 +179,19 @@ async def launch_container(
 @router.post(
     "/{container_id}/restart",
     status_code=status.HTTP_200_OK,
-    summary="Restart an existing container"
+    summary="Restart container",
+    description="Restart an existing container environment."
 )
 async def restart_container(
     container_id: str,
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Restart a container environment.
+    
+    This sends a restart command to the container host where the
+    container is running. The container will be stopped and started again.
+    """
     # 1) Lookup the container record
     stmt = select(Container).where(Container.id == container_id)
     cont = (await db.execute(stmt)).scalar_one_or_none()
@@ -204,12 +227,23 @@ async def restart_container(
 @router.delete(
     "/{container_id}",
     status_code=status.HTTP_200_OK,
-    summary="Stop, remove and purge a container"
+    summary="Stop and remove container",
+    description="Stop, remove, and clean up a container environment along with its VPN access."
 )
 async def stop_container(
     container_id: str,
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Stop and completely remove a container environment.
+    
+    This operation:
+    1. Stops and removes the container from the host
+    2. Removes VPN routing rules
+    3. Revokes the container's VPN profile
+    4. Updates host capacity counters
+    5. Removes the container record from the database
+    """
     # 1) Lookup the container record
     stmt = select(Container).where(Container.id == container_id)
     cont = (await db.execute(stmt)).scalar_one_or_none()
@@ -304,11 +338,22 @@ async def inspect_container(
     "/",
     # response_model=list[ContainerInfoResponse],
     status_code=status.HTTP_200_OK,
-    summary="List all containers (from the database)"
+    summary="List all containers",
+    description="Retrieve a list of all containers managed by the platform."
 )
 async def list_all_containers(
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Get a list of all containers in the system.
+    
+    Returns basic information about each container including:
+    - Container ID and name
+    - Associated user ID
+    - Host assignment
+    - Creation timestamp
+    - Current status
+    """
     # 1) Fetch all Container records
     stmt = select(Container)
     result = await db.execute(stmt)
