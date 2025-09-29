@@ -24,7 +24,7 @@ class ContainerHost(Base):
         doc="Logical name of the container server"
     )
     ip = Column(
-        INET,
+        String,
         nullable=False,
         doc="Management IP of the host"
     )

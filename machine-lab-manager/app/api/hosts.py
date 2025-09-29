@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, IPvAnyAddress, conint
+from pydantic import BaseModel, conint
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 import datetime
@@ -37,7 +37,7 @@ def compute_healthiness(status: HostStatus, cpu: int, mem: int) -> Healthiness:
 
 class HostBase(BaseModel):
     hostname: str
-    ip: IPvAnyAddress
+    ip: str
     ssh_port: conint(gt=0, lt=65536) = 22
     api_port: conint(gt=0, lt=65536) = 8000
     max_containers: conint(gt=0)
@@ -55,7 +55,7 @@ class HostCreate(HostBase):
 
 class HostUpdate(BaseModel):
     hostname: str | None = None
-    ip: IPvAnyAddress | None = None
+    ip: str | None = None
     ssh_port: conint(gt=0, lt=65536) | None = None
     api_port: conint(gt=0, lt=65536) | None = None
     max_containers: conint(gt=0) | None = None
