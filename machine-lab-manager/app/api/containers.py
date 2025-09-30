@@ -270,9 +270,6 @@ async def stop_container(
         )
 
     # 4) Tear down VPN routing and profile
-    #    - Deny traffic
-    remove_vpn_rule(cont.id)  
-    #    - Revoke profile & clean files
     await remove_vpn_profile(db, cont.id)
 
     # 5) Update DB

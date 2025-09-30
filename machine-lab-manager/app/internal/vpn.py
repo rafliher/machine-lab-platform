@@ -116,8 +116,10 @@ async def create_or_get_profile(db: AsyncSession, user_id: str) -> str:
     if prof:
         return prof.config_path
 
-    # 2) Allocate next IP
-    existing_ips = (await db.execute(select(VPNProfile.ip_address))).scalars().all()
+    # 2) Allocate next IP (only consider non-revoked profiles)
+    existing_ips = (await db.execute(
+        select(VPNProfile.ip_address).where(VPNProfile.revoked == False)
+    )).scalars().all()
     used_octets = {int(str(ip).split(".")[-1]) for ip in existing_ips if ip is not None}
     for octet in range(2, NETWORK.num_addresses - 1):
         if octet not in used_octets:
@@ -205,13 +207,22 @@ def remove_vpn_rule(ip: str):
 
 async def remove_vpn_profile(db: AsyncSession, user_id: uuid.UUID | str):
     """
-    Mark profile revoked, drop iptables rule, and leave file cleanup
-    to the next create_or_get_profile call.
+    Mark profile revoked, drop iptables rule, and clean up all VPN files.
     """
     stmt = select(VPNProfile).where(
         VPNProfile.client_name == str(user_id), VPNProfile.revoked == False
     )
     res = await db.execute(stmt)
+    profiles_to_cleanup = []
+    
     for prof in res.scalars().all():
         prof.revoked = True
+        # Remove iptables rules for this IP
+        remove_vpn_rule(prof.ip_address)
+        profiles_to_cleanup.append(str(user_id))
+            
     await db.commit()
+    
+    # Clean up all VPN files after successful database commit
+    for client_name in profiles_to_cleanup:
+        await asyncio.to_thread(_cleanup_artifacts_sync, client_name)
