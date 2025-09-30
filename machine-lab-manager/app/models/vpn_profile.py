@@ -27,7 +27,7 @@ class VPNProfile(Base):
     ip_address = Column(
         INET,
         nullable=False,
-        unique=True,
+        unique=False,
         doc="Static VPN IP assigned to this client",
     )
 
