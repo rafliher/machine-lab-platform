@@ -148,7 +148,7 @@ async def launch_container(
             agent_url,
             json=payload,
             headers={"X-Server-Key": host.cred_ref},
-            timeout=30.0,
+            timeout=600.0,  # 10 minutes for container building
         )
 
     if resp.status_code != status.HTTP_201_CREATED:
