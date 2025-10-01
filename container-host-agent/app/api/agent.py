@@ -156,9 +156,9 @@ def remove_container(name: str):
         raise HTTPException(status_code=404, detail="Environment not found")
 
     try:
-        # Shut down, remove volumes & images
+        # Shut down and remove volumes but keep images for build cache
         subprocess.run(
-            ["docker", "compose", "down", "--volumes", "--rmi", "all"],
+            ["docker", "compose", "down", "--volumes"],
             cwd=work_dir,
             check=True
         )
