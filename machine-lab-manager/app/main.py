@@ -26,6 +26,8 @@ app = FastAPI(
     docs_url="/docs" if is_development else None,
     redoc_url="/redoc" if is_development else None,
     openapi_url="/openapi.json" if is_development else None,
+    # Disable automatic redirects
+    redirect_slashes=False,
 )
 
 # DEV
@@ -36,6 +38,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Debug middleware to log requests and handle Cloudflare headers
+# @app.middleware("http")
+# async def debug_requests(request, call_next):
+#     print(f"Request URL: {request.url}")
+#     print(f"Request scheme: {request.url.scheme}")
+#     print(f"CF-Visitor header: {request.headers.get('CF-Visitor')}")
+#     print(f"X-Forwarded-Proto header: {request.headers.get('X-Forwarded-Proto')}")
+#     print(f"Request headers: {dict(request.headers)}")
+    
+#     # Handle Cloudflare HTTPS forwarding
+#     cf_visitor = request.headers.get('CF-Visitor')
+#     x_forwarded_proto = request.headers.get('X-Forwarded-Proto')
+    
+#     # Set the correct scheme for URL generation
+#     if cf_visitor and '"scheme":"https"' in cf_visitor:
+#         request.scope['scheme'] = 'https'
+#     elif x_forwarded_proto == 'https':
+#         request.scope['scheme'] = 'https'
+    
+#     response = await call_next(request)
+#     print(f"Response status: {response.status_code}")
+    
+#     # Ensure redirect responses use HTTPS
+#     if response.status_code in [301, 302, 307, 308]:
+#         location = response.headers.get('location', '')
+#         if location.startswith('http://'):
+#             response.headers['location'] = location.replace('http://', 'https://', 1)
+#             print(f"Fixed redirect location: {response.headers['location']}")
+    
+#     return response
 
 app.include_router(auth_router)
 app.include_router(user_router)
