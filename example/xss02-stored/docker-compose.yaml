@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  selenium:
+    image: selenium/standalone-chrome:latest
+    shm_size: 2gb
+    environment:
+      - SE_VNC_NO_PASSWORD=1
+    networks:
+      - challenge_network
+
+  server:
+    build: .
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    environment:
+      - FLASK_ENV=development
+      - SELENIUM_URL=http://selenium:4444
+    depends_on:
+      - selenium
+    networks:
+      - challenge_network
+
+networks:
+  challenge_network:
+    driver: bridge

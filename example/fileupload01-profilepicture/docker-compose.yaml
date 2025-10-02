@@ -1,0 +1,9 @@
+
+services:
+  php-app:
+    build: .
+    restart: on-failure
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun

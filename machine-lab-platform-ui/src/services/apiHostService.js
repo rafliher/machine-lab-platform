@@ -1,7 +1,7 @@
 import api from './api';
 
 export function listHost() {
-  return api.get('/hosts');
+  return api.get('/hosts/');
 }
 
 export function registerHost(hostData) {

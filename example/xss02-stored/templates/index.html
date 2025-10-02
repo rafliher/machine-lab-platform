@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comment System - Stored XSS Challenge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto mt-8 p-6">
+        <h1 class="text-3xl font-bold text-center mb-8">Comment System</h1>
+        
+        <div class="max-w-4xl mx-auto">
+            <!-- Flash messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded-lg {% if category == 'success' %}bg-green-100 text-green-700{% else %}bg-red-100 text-red-700{% endif %}">
+                        {{ message|safe }}
+                    </div>
+                {% endfor %}
+            {% endwith %}
+            
+            <!-- Add comment form -->
+            <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+                <h2 class="text-xl font-bold mb-4">Add Your Comment</h2>
+                <form method="POST" action="/add_comment">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                        <input type="text" name="name" class="w-full p-3 border rounded-lg" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Comment</label>
+                        <textarea name="comment" rows="4" class="w-full p-3 border rounded-lg" placeholder="Enter your comment here..." required></textarea>
+                    </div>
+                    <button type="submit" class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600">
+                        Post Comment
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Navigation -->
+            <div class="mb-6 text-center">
+                <a href="/exploit_server" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 mr-4">
+                    View Exploit Server Logs
+                </a>
+                <span class="text-gray-600">Exploit Server: <span id="exploit-server-url"></span></span>
+            </div>
+            
+            <!-- Comments display -->
+            <div class="space-y-4">
+                <h2 class="text-xl font-bold mb-4">Comments ({{ comments|length }})</h2>
+                
+                {% for comment in comments %}
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <div class="flex justify-between items-start mb-2">
+                        <strong class="text-blue-600">{{ comment[0] }}</strong>
+                        <span class="text-sm text-gray-500">{{ comment[2] }}</span>
+                    </div>
+                    <!-- Vulnerable: comment content is rendered without escaping -->
+                    <div class="text-gray-800">{{ comment[1]|safe }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <!-- XSS Payload Examples -->
+            <div class="mt-8 p-4 bg-yellow-100 rounded-lg">
+                <h3 class="font-bold text-yellow-800 mb-2">💡 Challenge Tips:</h3>
+                <div class="text-sm text-yellow-700 space-y-2">
+                    <div class="mt-3 p-2 bg-blue-100 rounded">
+                        <p><strong>🔧 Network Info:</strong></p>
+                        <p>• <strong>From your browser:</strong> Use <code>http://localhost:8080</code> or <code>http://[current-hostname]:8080</code></p>
+                        <p>• <strong>From admin bot:</strong> Admin can access exploit server at <code>http://server:8080</code> (Docker service name)</p>
+                        <p>• <strong>Best practice:</strong> Use dynamic hostname: <code>window.location.hostname + ':8080'</code></p>
+                    </div>
+                </div>
+                <p class="text-sm text-yellow-700 mt-2">
+                    <strong>Note:</strong> Admin will visit this page automatically after you post a comment.
+                </p>
+            </div>
+        </div>
+    </div>
+        <script>
+        // Dynamically set the exploit server URL based on current hostname
+        document.getElementById('exploit-server-url').textContent = 
+            'http://' + window.location.hostname + ':8080';
+    </script>
+</body>
+</html>

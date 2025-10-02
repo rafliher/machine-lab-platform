@@ -1,7 +1,7 @@
 import api from './api';
 
 export function listContainer() {
-  return api.get('/containers');
+  return api.get('/containers/');
 }
 
 export function addContainer(userId, containerData) {
